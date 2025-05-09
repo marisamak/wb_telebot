@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 
 # Настройки
 API_TOKEN = "8092555394:AAHwvVmGcJYGw3Gu_LZe4aJ0U3K1v2aHqUw"
-CHECK_INTERVAL = 3600  # Проверка каждые 1 час
+CHECK_INTERVAL = 1800  # Проверка каждые 1 час
 DB_FILE = "tracking.db"
 
 # Логирование
@@ -54,7 +54,6 @@ def get_main_menu():
         keyboard=[
             [KeyboardButton(text="➕ Добавить товар")],
             [KeyboardButton(text="📋 Мои товары"), KeyboardButton(text="❌ Удалить товар")],
-            [KeyboardButton(text="⚙️ Настройки")]
         ],
         resize_keyboard=True,
         input_field_placeholder="Выберите действие"
@@ -157,12 +156,15 @@ def get_current_price(product_id):
         if response.status_code != 200:
             return None
         data = response.json()
-        product = data.get("data", {}).get("products", [])[0]
+        products = data.get("data", {}).get("products", [])
+        if not products:
+            logger.warning(f"⚠️ API не вернул продукт {product_id}")
+            return None
+        product = products[0]
         return product.get("salePriceU", 0) // 100
     except Exception as e:
         logger.error(f"[get_current_price] Ошибка получения цены для {product_id}: {e}")
         return None
-
 
 
 # ===== КОМАНДЫ =====
@@ -186,7 +188,7 @@ async def add_product_start(message: types.Message):
 async def show_products(message: types.Message):
     user_id = message.from_user.id
     products = conn.execute(
-        "SELECT product_id, name, last_price FROM products WHERE user_id=?",
+        "SELECT product_id, name, current_price FROM products WHERE user_id=?",
         (user_id,)
     ).fetchall()
 
@@ -270,7 +272,7 @@ async def track_product(callback: types.CallbackQuery):
     data = get_product_data(product_id)
 
     if not data:
-        await callback.message.answer("Ошибка: товар не найден.")
+        await callback.message.answer("Ошибка: товар не найден")
         return
 
     with conn:
@@ -299,7 +301,7 @@ async def delete_product(callback: types.CallbackQuery):
         )
 
     await callback.message.answer(
-        "Товар удален из отслеживания.",
+        "Товар удален из отслеживания",
         reply_markup=get_main_menu()
     )
 
@@ -310,10 +312,11 @@ async def check_price_changes():
         await asyncio.sleep(CHECK_INTERVAL)
         logger.info("🔍 Проверяю изменения цен...")
 
+        # 0.041666 ≈ 1 час в формате дней для SQLite
         products = conn.execute("""
             SELECT user_id, product_id, name, url, current_price 
             FROM products
-            WHERE julianday('now') - julianday(last_check) > 0.041666  # ~1 час в днях
+            WHERE julianday('now') - julianday(last_check) > 0.041666
             LIMIT 50
         """).fetchall()
 
@@ -350,19 +353,8 @@ async def check_price_changes():
             except Exception as e:
                 logger.error(f"Ошибка проверки цены {pid}: {e}")
 
-def force_test_price_change():
-    with conn:
-        # Проверяем существование товара перед обновлением
-        conn.execute("""
-            INSERT OR IGNORE INTO products 
-            (user_id, product_id, name, brand, url, current_price)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (991168173, 74615560, "Тестовый товар", "Тест", "https://example.com", 999))
-        conn.commit()
-
 # ===== ЗАПУСК =====
 async def main():
-    force_test_price_change()
     asyncio.create_task(check_price_changes())
     logger.info("Бот запущен!")
     await dp.start_polling(bot)
