@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 
 # Настройки
 API_TOKEN = "8092555394:AAHwvVmGcJYGw3Gu_LZe4aJ0U3K1v2aHqUw"
-CHECK_INTERVAL = 1800  # Проверка каждые 1 час
+CHECK_INTERVAL = 1800  # Проверка каждые 30 минут
 DB_FILE = "tracking.db"
 
 # Логирование
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS products (
 conn.commit()
 
 
-# ===== КЛАВИАТУРЫ =====
+# КЛАВИАТУРЫ
 def get_main_menu():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -73,7 +73,7 @@ def get_track_keyboard(product_id):
     ])
 
 
-# ===== ОБРАБОТКА ТОВАРОВ =====
+# ОБРАБОТКА ТОВАРОВ
 def extract_product_id(text):
     # Из ссылки: https://www.wildberries.ru/catalog/12345678/detail.aspx
     if "wildberries.ru" in text:
@@ -167,7 +167,7 @@ def get_current_price(product_id):
         return None
 
 
-# ===== КОМАНДЫ =====
+# КОМАНДЫ
 @dp.message(CommandStart())
 async def start(message: types.Message):
     await message.answer(
@@ -229,7 +229,7 @@ async def cancel_action(message: types.Message):
     await message.answer("Действие отменено.", reply_markup=get_main_menu())
 
 
-# ===== ОБРАБОТКА ТОВАРОВ =====
+# ОБРАБОТКА ТОВАРОВ
 @dp.message(F.text)
 async def handle_product_input(message: types.Message):
     product_id = extract_product_id(message.text)
@@ -264,7 +264,7 @@ async def handle_product_input(message: types.Message):
         await message.answer(caption)
 
 
-# ===== CALLBACK ОБРАБОТЧИКИ =====
+# CALLBACK ОБРАБОТЧИКИ
 @dp.callback_query(F.data.startswith("track:"))
 async def track_product(callback: types.CallbackQuery):
     product_id = callback.data.split(":")[1]
@@ -306,7 +306,7 @@ async def delete_product(callback: types.CallbackQuery):
     )
 
 
-# ===== ФОНОВАЯ ПРОВЕРКА ЦЕН =====
+# ФОНОВАЯ ПРОВЕРКА ЦЕН
 async def check_price_changes():
     while True:
         await asyncio.sleep(CHECK_INTERVAL)
@@ -316,7 +316,7 @@ async def check_price_changes():
         products = conn.execute("""
             SELECT user_id, product_id, name, url, current_price 
             FROM products
-            WHERE julianday('now') - julianday(last_check) > 0.041666
+            WHERE julianday('now') - julianday(last_check) > 0.020833
             LIMIT 50
         """).fetchall()
 
@@ -353,7 +353,7 @@ async def check_price_changes():
             except Exception as e:
                 logger.error(f"Ошибка проверки цены {pid}: {e}")
 
-# ===== ЗАПУСК =====
+# ЗАПУСК
 async def main():
     asyncio.create_task(check_price_changes())
     logger.info("Бот запущен!")
