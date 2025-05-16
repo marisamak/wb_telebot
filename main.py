@@ -1,5 +1,3 @@
-# main.py — бот с удобным меню и правильным форматом сообщений
-
 import asyncio
 import logging
 import re
