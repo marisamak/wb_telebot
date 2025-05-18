@@ -75,12 +75,12 @@ def get_track_keyboard(product_id):
 def extract_product_id(text):
     # Из ссылки: https://www.wildberries.ru/catalog/12345678/detail.aspx
     if "wildberries.ru" in text:
-        match = re.search(r"catalog/(\d+)", text)
+        match = re.search(r"catalog/(\d+)", text) # выражение для поиска в строке подстроки вида "catalog/число"
         if match:
-            return match.group(1)
+            return match.group(1) # возвращает первую группу из совпадения (id товара)
 
     # Из ID: 12345678
-    if text.isdigit() and len(text) >= 6:
+    if text.isdigit() and len(text) >= 6: # проверяет, состоит ли строка только из цифр (isdigit()) и имеет ли она длину 6 или более символов, чтобы определить, является ли text ID товара
         return text
 
     return None
@@ -89,20 +89,20 @@ def extract_product_id(text):
 def get_product_data(product_id):
     def parse_html_price(prod_id):
         try:
-            url = f"https://www.wildberries.ru/catalog/{prod_id}/detail.aspx"
+            url = f"https://www.wildberries.ru/catalog/{prod_id}/detail.aspx" # Формирует URL страницы товара, подставляя
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept-Language': 'ru-RU,ru;q=0.9'
+                'Accept-Language': 'ru-RU,ru;q=0.9' # Задаёт HTTP-заголовки для имитации запроса от браузера
             }
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=10) # Выполняет GET-запрос к URL
 
             if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
+                soup = BeautifulSoup(response.text, 'html.parser') # Создаёт объект BeautifulSoup для парсинга HTML-кода страницы
                 price_tag = soup.find('h2', class_='price-history__title')
                 if price_tag:
-                    price_text = price_tag.get_text(strip=True)
+                    price_text = price_tag.get_text(strip=True) # Извлекает текст из тега, удаляя лишние пробелы
                     return int(''.join(filter(str.isdigit, price_text.replace('&nbsp;', ''))))
-        except Exception as e:
+        except Exception as e: # Ловит любые ошибки
             logger.error(f"HTML price error: {e}")
         return None
 
@@ -114,8 +114,8 @@ def get_product_data(product_id):
         if api_response.status_code != 200:
             return None
 
-        data = api_response.json()
-        products = data.get("data", {}).get("products", [])
+        data = api_response.json() # Преобразует ответ API в JSON-объект
+        products = data.get("data", {}).get("products", []) # Извлекает список товаров из JSON
         if not products:
             return None
 
@@ -138,28 +138,28 @@ def get_product_data(product_id):
             "image": f"https://images.wbstatic.net/big/new/{prod['id']}-1.jpg",
             "url": f"https://www.wildberries.ru/catalog/{prod['id']}/detail.aspx"
         }
-    except Exception as e:
+    except Exception as e: # Ловит любые ошибки
         logger.error(f"API error: {e}")
         return None
 
 
-def get_current_price(product_id):
+def get_current_price(product_id): # принимает product_id (ID товара, например, "12345678") и возвращает цену товара в рублях
     try:
         url = f"https://card.wb.ru/cards/detail?appType=1&curr=rub&dest=-1257786&nm={product_id}"
         headers = {
             'User-Agent': 'Mozilla/5.0',
             'Accept-Language': 'ru-RU'
-        }
+        } # Задаёт HTTP-заголовки
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
             return None
-        data = response.json()
-        products = data.get("data", {}).get("products", [])
+        data = response.json() # Преобразует ответ API в JSON-объект
+        products = data.get("data", {}).get("products", []) # Извлекает список товаров из JSON
         if not products:
             logger.warning(f"⚠️ API не вернул продукт {product_id}")
             return None
         product = products[0]
-        return product.get("salePriceU", 0) // 100
+        return product.get("salePriceU", 0) // 100 # Извлекает текущую цену
     except Exception as e:
         logger.error(f"[get_current_price] Ошибка получения цены для {product_id}: {e}")
         return None
@@ -207,14 +207,14 @@ async def delete_product_start(message: types.Message):
     products = conn.execute(
         "SELECT product_id, name FROM products WHERE user_id=?",
         (user_id,)
-    ).fetchall()
+    ).fetchall() # Выполняет SQL-запрос к базе данных
 
     if not products:
         await message.answer("Нет товаров для удаления.", reply_markup=get_main_menu())
         return
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
-    for pid, name in products:
+    for pid, name in products: # Перебирает список товаров
         keyboard.inline_keyboard.append(
             [InlineKeyboardButton(text=f"❌ {name[:20]}...", callback_data=f"delete:{pid}")]
         )
@@ -259,7 +259,7 @@ async def handle_product_input(message: types.Message):
             caption=caption
         )
     except:
-        await message.answer(caption)
+        await message.answer(caption) # Если отправка фото не удалась, отправляет только текстовое сообщение без изображения
 
 
 # CALLBACK ОБРАБОТЧИКИ
@@ -292,11 +292,11 @@ async def delete_product(callback: types.CallbackQuery):
     product_id = callback.data.split(":")[1]
     user_id = callback.from_user.id
 
-    with conn:
+    with conn: # Открывает транзакцию с базой данных
         conn.execute(
             "DELETE FROM products WHERE user_id=? AND product_id=?",
             (user_id, product_id)
-        )
+        ) # Выполняет SQL-запрос для вставки или замены записи в таблице
 
     await callback.message.answer(
         "Товар удален из отслеживания",
@@ -307,7 +307,7 @@ async def delete_product(callback: types.CallbackQuery):
 # ФОНОВАЯ ПРОВЕРКА ЦЕН
 async def check_price_changes():
     while True:
-        await asyncio.sleep(CHECK_INTERVAL)
+        await asyncio.sleep(CHECK_INTERVAL) # Приостанавливает выполнение на время
         logger.info("🔍 Проверяю изменения цен...")
 
         # 0.041666 ≈ 1 час в формате дней для SQLite
@@ -316,9 +316,9 @@ async def check_price_changes():
             FROM products
             WHERE julianday('now') - julianday(last_check) > 0.020833
             LIMIT 50
-        """).fetchall()
+        """).fetchall() # Выполняет SQL-запрос к базе данных
 
-        for user_id, pid, name, url, old_price in products:
+        for user_id, pid, name, url, old_price in products: # Перебирает список товаров, распаковывая данные
             try:
                 # Получаем ТОЛЬКО текущую цену
                 new_price = get_current_price(pid)
@@ -346,7 +346,7 @@ async def check_price_changes():
                         UPDATE products 
                         SET current_price = ?, last_check = datetime('now')
                         WHERE product_id = ? AND user_id = ?
-                    """, (new_price, pid, user_id))
+                    """, (new_price, pid, user_id)) # Обновляет в базе данных
 
             except Exception as e:
                 logger.error(f"Ошибка проверки цены {pid}: {e}")
